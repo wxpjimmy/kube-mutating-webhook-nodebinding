@@ -1,0 +1,23 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: nodebinding-webhook-cfg
+  labels:
+    app: nodebinding
+webhooks:
+- name: nodebinding.wxpjimmy.me
+  clientConfig:
+    service:
+      name: nodebinding-webhook-svc
+      namespace: nodebinding
+      path: "/mutate"
+    caBundle: ${CA_BUNDLE}
+  rules:
+  - operations: ["CREATE", "UPDATE"]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  namespaceSelector:
+    matchExpressions:
+    - key: kf-partition
+      operator: Exists

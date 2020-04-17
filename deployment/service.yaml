@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodebinding-webhook-svc
+  namespace: nodebinding
+  labels:
+    app: nodebinding
+spec:
+  ports:
+  - port: 443
+    targetPort: 8443
+  selector:
+    app: nodebinding

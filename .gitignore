@@ -1,0 +1,3 @@
+mutatingwebhook-ca-bundle.yaml
+./deployment/mutatingwebhook-ca-bundle.yaml
+build/_output/bin/*

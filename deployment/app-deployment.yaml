@@ -1,0 +1,18 @@
+ apiVersion: extensions/v1beta1
+ kind: Deployment
+ metadata:
+   name: sleep
+   namespace: kfnp1
+ spec:
+   replicas: 1
+   template:
+     metadata:
+       labels:
+         app: sleep
+     spec:
+       containers:
+       - name: sleep
+         image: xpacrdemo.azurecr.io/curl:v1
+         command: ["/bin/sleep","infinity"]
+         imagePullPolicy: IfNotPresent
+
