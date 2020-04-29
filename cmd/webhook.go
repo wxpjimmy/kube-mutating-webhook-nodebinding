@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 
 	"github.com/golang/glog"
 	"gomodules.xyz/jsonpatch/v2"
@@ -15,6 +17,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 var (
@@ -24,6 +29,7 @@ var (
 
 	// (https://github.com/kubernetes/kubernetes/issues/57982)
 	defaulter = runtime.ObjectDefaulter(runtimeScheme)
+	cl        client.Client
 )
 
 var ignoredNamespaces = []string{
@@ -58,10 +64,19 @@ func init() {
 	// defaulting with webhooks:
 	// https://github.com/kubernetes/kubernetes/issues/57982
 	//  _ = v1.AddToScheme(runtimeScheme)
+	var err error
+	cl, err = client.New(config.GetConfigOrDie(), client.Options{
+		Scheme: runtimeScheme,
+	})
+	if err != nil {
+		glog.Errorf("Unable to create client: %v", err)
+		os.Exit(1)
+	}
 }
 
 // main mutation process
 func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
+	ctx := context.Background()
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -76,9 +91,28 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 	glog.Infof("AdmissionReview for Kind=%v, Namespace=%v Name=%v (%v) UID=%v Operation=%v UserInfo=%v",
 		req.Kind, req.Namespace, req.Name, pod.Name, req.UID, req.Operation, req.UserInfo)
 
-	newPod, err := whsvr.mutatePod(&pod, req.Namespace)
+	foundNs := &corev1.Namespace{}
+	err := cl.Get(ctx, types.NamespacedName{Name: req.Namespace}, foundNs)
 	if err != nil {
-		glog.Errorf("Error while mutating oldPod: %v, Pod=%v, Namespace=%v", err, pod, req.Namespace)
+		glog.Errorf("Error while getting namespace resource obj, err=%v, Namespace=%v", err, req.Namespace)
+		return &v1beta1.AdmissionResponse{
+			Result: &metav1.Status{
+				Message: err.Error(),
+			},
+		}
+	}
+	glog.Infof("Found namespace obj: %v", foundNs)
+	var patchNamespace = req.Namespace
+	if foundNs.Labels != nil {
+		if rootNs, ok := foundNs.Labels["root-ns"]; ok {
+			patchNamespace = rootNs
+		}
+	}
+	glog.Infof("Updated root namespace: %v", patchNamespace)
+
+	newPod, err := whsvr.mutatePod(&pod, patchNamespace)
+	if err != nil {
+		glog.Errorf("Error while mutating oldPod: %v, Pod=%v, Namespace=%v, RootNamespace=%v", err, pod, req.Namespace, patchNamespace)
 		return &v1beta1.AdmissionResponse{
 			Result: &metav1.Status{
 				Message: err.Error(),
@@ -88,7 +122,7 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 
 	patchBytes, err := whsvr.getPatch(req.Object.Raw, newPod)
 	if err != nil {
-		glog.Errorf("Error while creating Patch: %v, oldPod=%v, newPod=%v, Namespace=%v", err, pod, newPod, req.Namespace)
+		glog.Errorf("Error while creating Patch: %v, oldPod=%v, newPod=%v, Namespace=%v, RootNamespace=%v", err, pod, newPod, req.Namespace, patchNamespace)
 		return &v1beta1.AdmissionResponse{
 			Result: &metav1.Status{
 				Message: err.Error(),

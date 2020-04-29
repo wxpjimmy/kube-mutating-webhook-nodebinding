@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nodebinding-svc-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nodebinding-svc-role
+subjects:
+- kind: ServiceAccount
+  name: nodebinding-service-account
+  namespace: nodebinding

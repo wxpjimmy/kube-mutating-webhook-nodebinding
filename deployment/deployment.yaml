@@ -15,9 +15,10 @@ spec:
       labels:
         app: nodebinding
     spec:
+      serviceAccountName: nodebinding-service-account
       containers:
         - name: nodebinding
-          image: xpacrdemo.azurecr.io/nodebinding:v1
+          image: xpacrdemo.azurecr.io/nodebinding:latest
           imagePullPolicy: IfNotPresent
           args:
           - -tlsCertFile=/etc/webhook/certs/cert.pem
